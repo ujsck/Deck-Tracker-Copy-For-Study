@@ -55,10 +55,10 @@ namespace Deck_Tracker_Copy_For_Study
                 {
                     string cardFileName = Name.ToLower().Replace(' ', '-').Replace(":", "").Replace("'", "-").Replace(".", "").Replace("!", "") + ".png";
 
-                    if (!File.Exists("images/" + cardFileName))
-                    {
-                        return new ImageBrush();
-                    }
+                    //if (!File.Exists("images/" + cardFileName))
+                    //{
+                    //    return new ImageBrush();
+                    //}
 
                     // stack images
                     System.Reflection.Assembly.GetEntryAssembly()

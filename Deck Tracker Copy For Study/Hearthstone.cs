@@ -89,7 +89,7 @@ namespace Deck_Tracker_Copy_For_Study
                     select card).ToList();
         }
 
-        public void SetPremadeDeck(List<Card> cards)
+        public void SetPremadeDeck(ObservableCollection<Card> cards)
         {
             PlayerDeck.Clear();
             foreach (var card in cards)
@@ -272,6 +272,21 @@ namespace Deck_Tracker_Copy_For_Study
                 card.Count++;
             }
             EnemyCards.Add(card);
+        }
+
+        internal void OpponentBackToHand(string cardId)
+        {
+            EnemyHandCount++;
+            if (EnemyCards.Any(c => c.Id == cardId))
+            {
+                var card = EnemyCards.First(c => c.Id == cardId);
+                EnemyCards.Remove(card);
+                card.Count--;
+                if (card.Count > 0)
+                {
+                    EnemyCards.Add(card);
+                }
+            }
         }
     }
 }

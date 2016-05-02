@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using MahApps.Metro.Controls;
 using Microsoft.Win32;
 
 namespace Deck_Tracker_Copy_For_Study
@@ -16,7 +17,7 @@ namespace Deck_Tracker_Copy_For_Study
     /// <summary>
     /// MainWindow.xaml 的交互逻辑
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : MetroWindow
     {
         private readonly Config _config;
         private readonly XmlManager<Config> _xmlManagerConfig;
@@ -25,8 +26,13 @@ namespace Deck_Tracker_Copy_For_Study
         private readonly Hearthstone _hearthstone;
         private readonly LogReader _logReader;
         private readonly bool _initialized;
-        private readonly Thread _otherThread;
-        private int _cardsInDeck;
+        private readonly Thread _updateThread;
+        private readonly OverlayWindow _overlay;
+        private readonly PlayerWindow _playerWindow;
+        private readonly OpponentWindow _opponentWindow;
+        private Deck _newDeck;
+        private bool _editingDeck;
+        private bool _newContainsDeck;
         private readonly string _logConfigPath =
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) + @"\Blizzard\Hearthstone\log.config";
 
@@ -77,18 +83,24 @@ namespace Deck_Tracker_Copy_For_Study
             _decks = _xmlManagerDecks.Load("PlayerDecks.xml");
 
             //add saved decks to gui
-            foreach (var deck in _decks.DecksList)
-            {
-                ComboBoxDecks.Items.Add(deck.Name);
-            }
-            ComboBoxDecks.SelectedItem = _config.LastDeck;
+            //foreach (var deck in _decks.DecksList)
+            //{
+            //    ComboBoxDecks.Items.Add(deck.Name);
+            //}
+            //ComboBoxDecks.SelectedItem = _config.LastDeck;
+            ListboxDecks.ItemsSource = _decks.DecksList;
 
             //hearthstone, loads db etc
             _hearthstone = new Hearthstone();
+            _newDeck = new Deck();
+            ListViewNewDeck.ItemsSource = _newDeck.Cards;
 
             //create overlay
-            //_overlay = new OverlayWindow(_config, _hearthstone) { Topmost = true };
+            _overlay = new OverlayWindow(_config, _hearthstone) { Topmost = true };
             //_overlay.Show();
+
+            _playerWindow = new PlayerWindow(_config, _hearthstone.PlayerDeck);
+            _opponentWindow = new OpponentWindow(_config, _hearthstone.EnemyCards);
 
             //load config
             _xmlManagerConfig = new XmlManager<Config> { Type = typeof(Config) };
@@ -121,15 +133,15 @@ namespace Deck_Tracker_Copy_For_Study
             //update ..
             UpdateDbListView(); // Show Cards In Db ListView
 
-            _otherThread = new Thread(Update);
-            _otherThread.Start();
+            _updateThread = new Thread(Update);
+            _updateThread.Start();
+            ListboxDecks.SelectedItem = _decks.DecksList.FirstOrDefault(d => d.Name != null && d.Name == _config.LastDeck);
 
             _initialized = true;
 
-            UpdateDeckList();
-            UseSelectedDeck();
+            UpdateDeckList(ListboxDecks.SelectedItem as Deck);
+            UseDeck(ListboxDecks.SelectedItem as Deck);
 
-            _initialized = true;
             _logReader.Start();
         }
 
@@ -268,11 +280,19 @@ namespace Deck_Tracker_Copy_For_Study
         }
         #endregion
 
+        private void SortCardCollection(ItemCollection collection)
+        {
+            var view1 = (CollectionView)CollectionViewSource.GetDefaultView(collection);
+            view1.SortDescriptions.Add(new SortDescription("Cost", ListSortDirection.Ascending));
+            view1.SortDescriptions.Add(new SortDescription("Type", ListSortDirection.Descending));
+            view1.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
+        }
+
         private void AddCardToDeck(Card card)
         {
-            if (ListViewDeck.Items.Contains(card))
+            if (_newDeck.Cards.Contains(card))
             {
-                var cardInDeck = (Card)ListViewDeck.Items.GetItemAt(ListViewDeck.Items.IndexOf(card));
+                var cardInDeck = _newDeck.Cards.First(c => c.Name == card.Name);
                 if (cardInDeck.Count > 1 || cardInDeck.Rarity == "Legendary")
                 {
                     if (
@@ -284,111 +304,96 @@ namespace Deck_Tracker_Copy_For_Study
                         return;
                     }
                 }
-                ListViewDeck.Items.Remove(cardInDeck);
+                _newDeck.Cards.Remove(cardInDeck);
                 cardInDeck.Count++;
-                ListViewDeck.Items.Add(cardInDeck);
+                _newDeck.Cards.Add(cardInDeck);
             }
             else
             {
-                ListViewDeck.Items.Add(card);
+                _newDeck.Cards.Add(card);
             }
 
-            ButtonUseDeck.Content = "Use Deck (" + (++_cardsInDeck) + ")";
-            var view1 = (CollectionView)CollectionViewSource.GetDefaultView(ListViewDeck.Items);
-            view1.SortDescriptions.Add(new SortDescription("Cost", ListSortDirection.Ascending));
-            view1.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
+            SortCardCollection(ListViewNewDeck.Items);
             BtnSaveDeck.Content = "Save*";
-
         }
 
         private void RemoveCardFromDeck(Card card)
         {
             if (card.Count > 1)
             {
-                ListViewDeck.Items.Remove(card);
+                _newDeck.Cards.Remove(card);
                 card.Count--;
-                ListViewDeck.Items.Add(card);
+                _newDeck.Cards.Add(card);
             }
             else
-                ListViewDeck.Items.Remove(card);
+                _newDeck.Cards.Remove(card);
 
-            ButtonUseDeck.Content = "Use Deck (" + (--_cardsInDeck) + ")";
-            var view1 = (CollectionView)CollectionViewSource.GetDefaultView(ListViewDeck.Items);
-            view1.SortDescriptions.Add(new SortDescription("Cost", ListSortDirection.Ascending));
-            view1.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
+            SortCardCollection(ListViewNewDeck.Items);
             BtnSaveDeck.Content = "Save*";
+        }
+
+        private void ClearNewDeckSection()
+        {
+            ComboBoxSelectClass.SelectedIndex = 0;
+            TextBoxDeckName.Text = string.Empty;
+            TextBoxDBFilter.Text = string.Empty;
+            ComboBoxFilterMana.SelectedIndex = 0;
+            _newDeck.Cards.Clear();
+            _newDeck.Class = string.Empty;
+            _newDeck.Name = string.Empty;
+            _newContainsDeck = false;
+            //_newDeck.Cards.Clear();
         }
 
         private void SaveDeck()
         {
-            var deck = new Deck();
-            deck.Cards = new List<Card>();
-            if (ComboBoxDecks.SelectedItem.ToString() == "Create New")
+            if (_newDeck.Cards.Sum(c => c.Count) != 30)
             {
-                deck.Name = TextBoxDeckName.Text;
-                ComboBoxDecks.Items.Add(deck.Name);
+                var result = MessageBox.Show(string.Format("Deck contains {0} cards. Is this what you want to save?", _newDeck.Cards.Sum(c => c.Count)),
+                                             "Deck does not contain 30 cards.", MessageBoxButton.YesNo);
+                if (result != MessageBoxResult.Yes)
+                    return;
             }
-            else
+            var deckName = TextBoxDeckName.Text;
+            if (string.IsNullOrEmpty(deckName))
             {
-                deck.Name = ComboBoxDecks.SelectedItem.ToString();
-                _decks.DecksList.Remove(
-                    _decks.DecksList.First(x => ComboBoxDecks.SelectedItem.ToString().Equals(x.Name)));
+                MessageBox.Show("Please set a name for the deck.");
+                return;
             }
-            foreach (var card in ListViewDeck.Items)
+            else if (_decks.DecksList.Any(d => d.Name == deckName) && !_editingDeck)
             {
-                deck.Cards.Add((Card)card);
+                MessageBox.Show("You already have a deck with that name!");
+                return;
             }
-            _decks.DecksList.Add(deck);
-
-            ComboBoxDecks.SelectedItem = deck.Name;
+            if (_editingDeck)
+            {
+                _decks.DecksList.Remove(_newDeck);
+            }
+            _newDeck.Name = deckName;
+            _newDeck.Class = ComboBoxSelectClass.SelectedValue.ToString();
+            _decks.DecksList.Add((Deck)_newDeck.Clone());
             _xmlManagerDecks.Save("PlayerDecks.xml", _decks);
             BtnSaveDeck.Content = "Save";
-        }
 
-        private void DeleteDeck()
-        {
-            var deck = new Deck();
-            deck.Cards = new List<Card>();
-            if (ComboBoxDecks.SelectedItem.ToString() == "Create New")
-            {
-                deck.Name = TextBoxDeckName.Text;
-                ComboBoxDecks.Items.Add(deck.Name);
-                _cardsInDeck = 0;
-                ButtonUseDeck.Content = "Use Deck (" + (_cardsInDeck) + ")";
-            }
-            else
-            {
-                deck.Name = ComboBoxDecks.SelectedItem.ToString();
-            }
+            //move to decks
+            TabControlTracker.SelectedIndex = 0;
+            _editingDeck = false;
 
+            ListboxDecks.SelectedItem = _decks.DecksList.First(d => d.Equals(_newDeck));
 
-            if (
-                MessageBox.Show("Are you Sure?", "Delete " + deck.Name, MessageBoxButton.YesNo, MessageBoxImage.Asterisk) ==
-                MessageBoxResult.Yes)
-            {
-                try
-                {
-
-                    _decks.DecksList.Remove(
-                        _decks.DecksList.First(x => ComboBoxDecks.SelectedItem.ToString().Equals(x.Name)));
-                    _xmlManagerDecks.Save("PlayerDecks.xml", _decks);
-                    ComboBoxDecks.SelectedIndex = 0;
-                    ComboBoxDecks.Items.Remove(deck.Name);
-                    _cardsInDeck = 0;
-                    ButtonUseDeck.Content = "Use Deck (" + (_cardsInDeck) + ")";
-                }
-                catch (Exception)
-                {
-                    Console.WriteLine("Error deleting deck");
-                }
-            }
+            ClearNewDeckSection();
         }
 
         private void LoadConfig()
         {
-            if (ComboBoxDecks.Items.Contains(_config.LastDeck))
-                ComboBoxDecks.SelectedItem = _config.LastDeck;
+            var deck = _decks.DecksList.FirstOrDefault(d => d.Name == _config.LastDeck);
+            if (deck != null && ListboxDecks.Items.Contains(deck))
+            {
+                ListboxDecks.SelectedItem = deck;
+            }
 
+            // Height = _config.WindowHeight;
+            Hearthstone.HighlightCardsInHand = _config.HighlightCardsInHand;
             CheckboxHideOverlayInBackground.IsChecked = _config.HideInBackground;
             CheckboxHideDrawChances.IsChecked = _config.HideDrawChances;
             CheckboxHideEnemyCards.IsChecked = _config.HideEnemyCards;
@@ -396,9 +401,7 @@ namespace Deck_Tracker_Copy_For_Study
             CheckboxHidePlayerCardCounter.IsChecked = _config.HidePlayerCardCount;
             CheckboxHideOverlayInMenu.IsChecked = _config.HideInMenu;
             CheckboxHighlightCardsInHand.IsChecked = _config.HighlightCardsInHand;
-            this.Height = _config.WindowHeight;
-            //_overlay.Dispatcher.BeginInvoke(new Action(() => _overlay.ShowInTaskbar = _config.ShowInTaskbar));
-            Hearthstone.HighlightCardsInHand = _config.HighlightCardsInHand;
+            //CheckboxHideOverlay.IsChecked = _config.HideOverlay;
         }
 
         private void SaveConfigUpdateOverlay()
@@ -407,106 +410,98 @@ namespace Deck_Tracker_Copy_For_Study
             //_overlay.Dispatcher.BeginInvoke(new Action(_overlay.Update));
         }
 
-        private void UseSelectedDeck()
+        private void UseDeck(Deck selected)
         {
-            if (ComboBoxDecks.SelectedItem.ToString() == "Create New")
+            if (selected == null)
                 return;
-            var firstOrDefault = _decks.DecksList.FirstOrDefault(x => x.Name != null && x.Name.Equals(ComboBoxDecks.SelectedItem.ToString()));
-            if (firstOrDefault != null)
+            _hearthstone.SetPremadeDeck(selected.Cards);
+            Dispatcher.BeginInvoke(new Action(() =>
             {
-                var deck =
-                    firstOrDefault.Cards;
-                if (deck != null)
-                {
-                    _hearthstone.SetPremadeDeck(deck);
-                    //_overlay.Dispatcher.BeginInvoke(new Action(_overlay.Update));
-                }
-            }
+                _hearthstone.PlayerHandCount = 0;
+                _hearthstone.EnemyCards.Clear();
+                _hearthstone.EnemyHandCount = 0;
+            }));
+            _logReader.Reset();
+
+            //_overlay.Dispatcher.BeginInvoke(new Action(_overlay.Update));
         }
 
         private void Update()
         {
             while (true)
             {
-                //_overlay.Dispatcher.BeginInvoke(new Action(() =>
-                //{
-                //    bool hide1 = false;
-                //    bool hide2 = false;
-                //    //hide in background depenting on option
-
-                //    if (CheckboxHideOverlayInBackground.IsChecked.Value)
-                //    {
-                //        hide1 = !User32.IsForegroundWindow("炉石传说");
-                //    }
-
-                //    if (CheckboxHideOverlayInMenu.IsChecked.Value)
-                //    {
-                //        hide2 = _hearthstone.IsInMenu;
-                //    }
-
-                //    _overlay.EnableCanvas(!(hide1 || hide2));
-                //    _overlay.UpdatePosition();
-                //}));
+                _overlay.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _overlay.UpdatePosition();
+                }));
                 Thread.Sleep(100);
             }
         }
 
         private void UpdateDbListView()
         {
-            ListViewDB.Items.Clear();
-
-            // filter
-            foreach (var card in _hearthstone.GetActualCards())
+            var selectedClass = ComboBoxSelectClass.SelectedValue.ToString();
+            var selectedNeutral = ComboboxNeutral.SelectedValue.ToString();
+            if (selectedClass == "Select a Class")
             {
-                if (!card.Name.ToLower().Contains(TextBoxDBFilter.Text.ToLower())) continue;
-                if (ComboBoxFilterClass.SelectedItem.ToString() == "All" ||
-                    ComboBoxFilterClass.SelectedItem.ToString() == card.GetPlayerClass ||
-                    (CheckboxIncludeNeutral.IsChecked.Value && card.GetPlayerClass == "Neutral"))
-                {
-                    if (ComboBoxFilterMana.SelectedItem.ToString() == "All")
-                        ListViewDB.Items.Add(card);
-                    else if (ComboBoxFilterMana.SelectedItem.ToString() == "9+" && card.Cost >= 9)
-                        ListViewDB.Items.Add(card);
-                    else if (ComboBoxFilterMana.SelectedItem.ToString() == card.Cost.ToString())
-                        ListViewDB.Items.Add(card);
-                }
-            }
-
-            // sort
-            var view1 = (CollectionView)CollectionViewSource.GetDefaultView(ListViewDB.Items);
-            view1.SortDescriptions.Add(new SortDescription("Cost", ListSortDirection.Ascending));
-            view1.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
-        }
-
-        private void UpdateDeckList()
-        {
-            if (ComboBoxDecks.SelectedItem.ToString() == "Create New")
-            {
-                ListViewDeck.Items.Clear();
-                _cardsInDeck = 0;
-                ButtonUseDeck.Content = "Use Deck (" + (_cardsInDeck) + ")";
-                TextBoxDeckName.IsEnabled = true;
+                ListViewDB.Items.Clear();
             }
             else
             {
-                TextBoxDeckName.IsEnabled = false;
-                ListViewDeck.Items.Clear();
-                var deck = _decks.DecksList.FirstOrDefault(x => x.Name != null && x.Name.Equals(ComboBoxDecks.SelectedItem));
-                if (deck == null) return;
+                ListViewDB.Items.Clear();
 
-                foreach (var card in deck.Cards)
+                foreach (var card in _hearthstone.GetActualCards())
                 {
-                    ListViewDeck.Items.Add(card);
+                    if (!card.Name.ToLower().Contains(TextBoxDBFilter.Text.ToLower()))
+                        continue;
+                    // mana filter
+                    if (ComboBoxFilterMana.SelectedItem.ToString() == "All"
+                        || ((ComboBoxFilterMana.SelectedItem.ToString() == "9+" && card.Cost >= 9)
+                            || (ComboBoxFilterMana.SelectedItem.ToString() == card.Cost.ToString())))
+                    {
+                        switch (selectedNeutral)
+                        {
+                            case "Class + Neutral":
+                                if (card.GetPlayerClass == selectedClass || card.GetPlayerClass == "Neutral")
+                                    ListViewDB.Items.Add(card);
+                                break;
+                            case "Class Only":
+                                if (card.GetPlayerClass == selectedClass)
+                                {
+                                    ListViewDB.Items.Add(card);
+                                }
+                                break;
+                            case "Neutral Only":
+                                if (card.GetPlayerClass == "Neutral")
+                                {
+                                    ListViewDB.Items.Add(card);
+                                }
+                                break;
+                        }
+                    }
                 }
-                _cardsInDeck = deck.Cards.Sum(c => c.Count);
-                ButtonUseDeck.Content = "Use Deck (" + (_cardsInDeck) + ")";
-                var view1 = (CollectionView)CollectionViewSource.GetDefaultView(ListViewDeck.Items);
-                view1.SortDescriptions.Add(new SortDescription("Cost", ListSortDirection.Ascending));
-                view1.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
 
-                _config.LastDeck = deck.Name;
-                _xmlManagerConfig.Save("config.xml", _config);
+                var view1 = (CollectionView)CollectionViewSource.GetDefaultView(ListViewDB.Items);
+                view1.SortDescriptions.Add(new SortDescription("Cost", ListSortDirection.Ascending));
+                view1.SortDescriptions.Add(new SortDescription("Type", ListSortDirection.Descending));
+                view1.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
             }
+        }
+
+        private void UpdateDeckList(Deck selected)
+        {
+            if (selected == null) return;
+
+            ListViewDeck.Items.Clear();
+            foreach (var card in selected.Cards)
+            {
+                ListViewDeck.Items.Add(card);
+            }
+            var cardsInDeck = selected.Cards.Sum(c => c.Count);
+
+            SortCardCollection(ListViewDeck.Items);
+            _config.LastDeck = selected.Name;
+            _xmlManagerConfig.Save("config.xml", _config);
         }
 
         #region GUI Handle
@@ -539,6 +534,7 @@ namespace Deck_Tracker_Copy_For_Study
             {
                 var card = (Card)ListViewDB.SelectedItem;
                 AddCardToDeck(card);
+                _newContainsDeck = true;
             }
         }
 
@@ -564,7 +560,27 @@ namespace Deck_Tracker_Copy_For_Study
 
         private void BtnDeleteDeck_Click(object sender, RoutedEventArgs e)
         {
-            DeleteDeck();
+            var deck = ListboxDecks.SelectedItem as Deck;
+            if (deck != null)
+            {
+                if (
+                    MessageBox.Show("Are you Sure?", "Delete " + deck.Name, MessageBoxButton.YesNo,
+                                    MessageBoxImage.Asterisk) ==
+                    MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        _decks.DecksList.Remove(deck);
+                        _xmlManagerDecks.Save("PlayerDecks.xml", _decks);
+                        ListboxDecks.SelectedIndex = -1;
+                        ListViewDeck.Items.Clear();
+                    }
+                    catch (Exception)
+                    {
+                        Console.WriteLine("Error deleting deck");
+                    }
+                }
+            }
         }
 
         private void ComboBoxFilterMana_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -579,74 +595,107 @@ namespace Deck_Tracker_Copy_For_Study
             UpdateDbListView();
         }
 
-        private void ButtonUseDeck_Click(object sender, RoutedEventArgs e)
-        {
-            if (ComboBoxDecks.SelectedItem.ToString() == "Create New")
-            {
-                MessageBox.Show("Save and/or select a deck first");
-                return;
-            }
-            if (BtnSaveDeck.Content.ToString().Contains("*"))
-            {
-                if (
-                    MessageBox.Show("Save deck first?", "Deck not saved", MessageBoxButton.YesNo,
-                                    MessageBoxImage.Asterisk) == MessageBoxResult.Yes)
-                {
-                    SaveDeck();
-                }
-            }
-            var firstOrDefault =
-                _decks.DecksList.FirstOrDefault(x => x.Name != null && x.Name.Equals(ComboBoxDecks.SelectedItem.ToString()));
-            if (firstOrDefault != null)
-            {
-                var deck =
-                    firstOrDefault.Cards;
-                if (deck != null)
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        _hearthstone.PlayerHandCount = 0;
-                        _hearthstone.EnemyCards.Clear();
-                        _hearthstone.EnemyHandCount = 0;
-                    }));
-                    _hearthstone.SetPremadeDeck(deck);
-                    _logReader.Reset(); // _previousSize = 0;
-                }
-            }
-        }
-
         private void ButtonNoDeck_Click(object sender, RoutedEventArgs e)
         {
+            ListboxDecks.SelectedIndex = -1;
+            UpdateDeckList(new Deck());
+            UseDeck(new Deck());
             Hearthstone.IsUsingPremade = false;
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                _hearthstone.PlayerDeck.Clear();
-                _hearthstone.PlayerHandCount = 0;
-                _hearthstone.EnemyCards.Clear();
-                _hearthstone.EnemyHandCount = 0;
-            }));
-            _config.LastDeck = "";
-            _logReader.Reset();
         }
 
-        private void ComboBoxDecks_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void ComboboxNeutral_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!_initialized) return;
-            BtnSaveDeck.Content = "Save";
-            UpdateDeckList();
+            UpdateDbListView();
+        }
+
+        private void ListboxDecks_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_initialized) return;
+            var deck = ListboxDecks.SelectedItem as Deck;
+            if (deck != null)
+            {
+                Hearthstone.IsUsingPremade = true;
+                UpdateDeckList(deck);
+                UseDeck(deck);
+            }
+        }
+
+        private void BtnEditDeck_Click(object sender, RoutedEventArgs e)
+        {
+            if (ListboxDecks.SelectedIndex == -1) return;
+            var selectedDeck = ListboxDecks.SelectedItem as Deck;
+            if (selectedDeck == null) return;
+            //move to new deck section with stuff preloaded
+            if (_newContainsDeck)
+            {
+                //still contains deck, discard?
+                var result = MessageBox.Show("New Deck Section still contains an unfinished deck. Discard?",
+                                             "Found unfinished deck.", MessageBoxButton.YesNo,
+                                             MessageBoxImage.Exclamation);
+                if (result == MessageBoxResult.No)
+                {
+                    TabControlTracker.SelectedIndex = 1;
+                    return;
+                }
+            }
+
+            ClearNewDeckSection();
+            _editingDeck = true;
+            _newContainsDeck = true;
+            _newDeck = (Deck)selectedDeck.Clone();
+            ListViewNewDeck.ItemsSource = _newDeck.Cards;
+
+            if (ComboBoxSelectClass.Items.Contains(_newDeck.Class))
+                ComboBoxSelectClass.SelectedValue = _newDeck.Class;
+
+            TextBoxDeckName.Text = _newDeck.Name;
+
+            UpdateDbListView();
+            TabControlTracker.SelectedIndex = 1;
+        }
+
+        private void BtnClearNewDeck_Click(object sender, RoutedEventArgs e)
+        {
+            ClearNewDeckSection();
+        }
+
+        private void ListViewDB_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                var card = (Card)ListViewDB.SelectedItem;
+                if (string.IsNullOrEmpty(card.Name)) return;
+                AddCardToDeck(card);
+            }
+        }
+
+        private void ListViewNewDeck_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            var originalSource = (DependencyObject)e.OriginalSource;
+            while ((originalSource != null) && !(originalSource is ListViewItem))
+            {
+                originalSource = VisualTreeHelper.GetParent(originalSource);
+            }
+
+            if (originalSource != null)
+            {
+                var card = (Card)ListViewNewDeck.SelectedItem;
+                RemoveCardFromDeck(card);
+            }
         }
 
         private void Window_Closing_1(object sender, CancelEventArgs e)
         {
             try
             {
-                //save config
-                _config.HideInBackground = CheckboxHideOverlayInBackground.IsChecked.Value;
-                _xmlManagerConfig.Save("config.xml", _config);
-
-                //_overlay.Close();
+                _overlay.Close();
                 _logReader.Stop();
-                _otherThread.Abort();
+                _updateThread.Abort();
+                //_options.Shutdown();
+                _playerWindow.Shutdown();
+                _opponentWindow.Shutdown();
+                _xmlManagerConfig.Save("config.xml", _config);
             }
             catch (Exception)
             {
@@ -655,20 +704,7 @@ namespace Deck_Tracker_Copy_For_Study
         }
         #endregion
 
-        #region CheckBox
-        private void CheckboxHideEnemyCards_Checked(object sender, RoutedEventArgs e)
-        {
-            if (!_initialized) return;
-            _config.HideEnemyCards = true;
-            SaveConfigUpdateOverlay();
-        }
-
-        private void CheckboxHideEnemyCards_Unchecked(object sender, RoutedEventArgs e)
-        {
-            if (!_initialized) return;
-            _config.HideEnemyCards = false;
-            SaveConfigUpdateOverlay();
-        }
+        #region OPTIONS
 
         private void CheckboxHighlightCardsInHand_Checked(object sender, RoutedEventArgs e)
         {
@@ -686,6 +722,20 @@ namespace Deck_Tracker_Copy_For_Study
             SaveConfigUpdateOverlay();
         }
 
+        private void CheckboxHideOverlay_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_initialized) return;
+            _config.HideOverlay = true;
+            SaveConfigUpdateOverlay();
+        }
+
+        private void CheckboxHideOverlay_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (!_initialized) return;
+            _config.HideOverlay = false;
+            SaveConfigUpdateOverlay();
+        }
+
         private void CheckboxHideOverlayInMenu_Checked(object sender, RoutedEventArgs e)
         {
             if (!_initialized) return;
@@ -696,20 +746,22 @@ namespace Deck_Tracker_Copy_For_Study
         private void CheckboxHideOverlayInMenu_Unchecked(object sender, RoutedEventArgs e)
         {
             if (!_initialized) return;
-            _config.HideInMenu = true;
+            _config.HideInMenu = false;
             SaveConfigUpdateOverlay();
         }
 
-        private void CheckboxIncludeNeutral_Checked(object sender, RoutedEventArgs e)
+        private void CheckboxHideDrawChances_Checked(object sender, RoutedEventArgs e)
         {
             if (!_initialized) return;
-            UpdateDbListView();
+            _config.HideDrawChances = true;
+            SaveConfigUpdateOverlay();
         }
 
-        private void CheckboxIncludeNeutral_Unchecked(object sender, RoutedEventArgs e)
+        private void CheckboxHideDrawChances_Unchecked(object sender, RoutedEventArgs e)
         {
             if (!_initialized) return;
-            UpdateDbListView();
+            _config.HideDrawChances = false;
+            SaveConfigUpdateOverlay();
         }
 
         private void CheckboxHidePlayerCardCounter_Checked(object sender, RoutedEventArgs e)
@@ -740,18 +792,59 @@ namespace Deck_Tracker_Copy_For_Study
             SaveConfigUpdateOverlay();
         }
 
-        private void CheckboxHideDrawChances_Checked(object sender, RoutedEventArgs e)
+        private void CheckboxHideEnemyCards_Checked(object sender, RoutedEventArgs e)
         {
             if (!_initialized) return;
-            _config.HideDrawChances = true;
+            _config.HideEnemyCards = true;
             SaveConfigUpdateOverlay();
         }
 
-        private void CheckboxHideDrawChances_Unchecked(object sender, RoutedEventArgs e)
+        private void CheckboxHideEnemyCards_Unchecked(object sender, RoutedEventArgs e)
         {
             if (!_initialized) return;
-            _config.HideDrawChances = false;
+            _config.HideEnemyCards = false;
             SaveConfigUpdateOverlay();
+        }
+
+
+        private void CheckboxHideOverlayInBackground_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_initialized) return;
+            _config.HideInBackground = true;
+            SaveConfigUpdateOverlay();
+        }
+
+        private void CheckboxHideOverlayInBackground_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (!_initialized) return;
+            _config.HideInBackground = false;
+            SaveConfigUpdateOverlay();
+        }
+        private void CheckboxWindowsTopmost_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_initialized) return;
+            _config.WindowsTopmost = true;
+            _playerWindow.Topmost = true;
+            _opponentWindow.Topmost = true;
+            SaveConfigUpdateOverlay();
+        }
+
+        private void CheckboxWindowsTopmost_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (!_initialized) return;
+            _config.WindowsTopmost = false;
+            _playerWindow.Topmost = false;
+            _opponentWindow.Topmost = false;
+            SaveConfigUpdateOverlay();
+        }
+
+        private void BtnShowWindows_Click(object sender, RoutedEventArgs e)
+        {
+            //show playeroverlay and enemy overlay
+            _playerWindow.Show();
+            _playerWindow.Activate();
+            _opponentWindow.Show();
+            _opponentWindow.Activate();
         }
         #endregion
 

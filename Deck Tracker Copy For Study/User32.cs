@@ -31,7 +31,7 @@ namespace Deck_Tracker_Copy_For_Study
             SetWindowLong(hwnd, GwlExstyle, extendedStyle | WsExTransparent);
         }
 
-        public static bool IsForegroudWindow(String lpWindowName)
+        public static bool IsForegroundWindow(String lpWindowName)
         {
             return GetForegroundWindow() == FindWindow(null, lpWindowName);
         }

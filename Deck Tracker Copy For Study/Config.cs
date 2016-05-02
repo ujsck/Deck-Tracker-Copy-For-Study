@@ -9,9 +9,20 @@
         public bool HideEnemyCardCount;
         public bool HidePlayerCardCount;
         public bool HideDrawChances;
+        public bool HideOverlay;
         public int WindowHeight;
         public string HearthstoneDirectory;
         public bool ShowInTaskbar;
         public bool HighlightCardsInHand;
+        public int OffsetX;
+        public int OffsetY;
+        public int CustomWidth;
+        public int CustomHeight;
+        public bool VisibleOverlay;
+        public int PlayerWindowHeight;
+        public int OpponentWindowHeight;
+        public bool WindowsTopmost;
+        public string WindowsBackgroundHex;
+        public double MaxHeightPct;
     }
 }
