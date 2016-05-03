@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
-using System.Windows;
+using System.Windows.Forms;
+using MessageBox = System.Windows.MessageBox;
 
 namespace Deck_Tracker_Copy_For_Study
 {
@@ -8,28 +10,45 @@ namespace Deck_Tracker_Copy_For_Study
     {
         private static XmlManager<SerializableVersion> _xmlManager;
 
-        public static void CheckForUpdates()
+        public static Version CheckForUpdates(out Version newVersionOut)
         {
+            newVersionOut = null;
+
+            SerializableVersion version;
+            _xmlManager = new XmlManager<SerializableVersion>() { Type = typeof(SerializableVersion) };
+
+            try
+            {
+                version = _xmlManager.Load("Version.xml");
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(
+                    e.Message + "\n\n" + e.InnerException + "\n\n If you don't know how to fix this, please verwrite Version.xml with the default file.", "Error loading Version.xml");
+
+                return null;
+            }
+
             var versionXmlUrl =
                 @"https://raw.githubusercontent.com/Epix37/Hearthstone-Deck-Tracker/master/Hearthstone%20Deck%20Tracker/Version.xml";
 
-            var xml = new WebClient().DownloadString(versionXmlUrl);
-
-            _xmlManager = new XmlManager<SerializableVersion>() { Type = typeof(SerializableVersion) };
-
-            var currentVersion = new Version(_xmlManager.Load("Version.xml").ToString());
-            var newVersion = new Version(_xmlManager.LoadFromString(xml).ToString());
-
-            if (newVersion > currentVersion)
+            var currentVersion = new Version(version.ToString());
+            try
             {
-                var releaseDownloadUrl = @"https://github.com/Epix37/Hearthstone-Deck-Tracker/releases";
-                if (
-                    MessageBox.Show("New version available at: \n" + releaseDownloadUrl, "New version available!",
-                                    MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                var xml = new WebClient().DownloadString(versionXmlUrl);
+
+                var newVersion = new Version(_xmlManager.LoadFromString(xml).ToString());
+
+                if (newVersion > currentVersion)
                 {
-                    System.Diagnostics.Process.Start(releaseDownloadUrl);
+                    newVersionOut = newVersion;
                 }
             }
+            catch (Exception e)
+            {
+                MessageBox.Show("Error checking for new version.\n\n" + e.Message + "\n\n" + e.InnerException);
+            }
+            return currentVersion;
         }
 
         public static bool IsNumeric(char c)
@@ -37,5 +56,66 @@ namespace Deck_Tracker_Copy_For_Study
             int output;
             return Int32.TryParse(c.ToString(), out output);
         }
+
+        public static bool IsFullscreen(string windowName)
+        {
+            var hsHandle = User32.FindWindow(null, windowName);
+
+            User32.Rect hsWindowRect = new User32.Rect();
+            User32.GetWindowRect(hsHandle, ref hsWindowRect);
+
+            var height = (hsWindowRect.bottom - hsWindowRect.top);
+            var width = (hsWindowRect.right - hsWindowRect.left);
+
+            var bounds = Screen.FromHandle(hsHandle).Bounds;
+
+            return bounds.Width == width && bounds.Height == height;
+        }
+
+        public static bool IsHex(IEnumerable<char> chars)
+        {
+            foreach (var c in chars)
+            {
+                var isHex = ((c >= '0' && c <= '9') ||
+                              (c >= 'a' && c <= 'f') ||
+                              (c >= 'A' && c <= 'F'));
+
+                if (!isHex)
+                    return false;
+            }
+            return true;
+        }
+
+        public static double DrawProbability(int copies, int deck, int draw)
+        {
+            return 1 - (BinomialCoefficient(deck - copies, draw) / BinomialCoefficient(deck, draw));
+        }
+
+        public static double BinomialCoefficient(int n, int k)
+        {
+            double result = 1;
+            for (int i = 1; i <= k; i++)
+            {
+                result *= n - (k - i);
+                result /= i;
+            }
+            return result;
+        }
+
+        public static Dictionary<string, string> LanguageDict = new Dictionary<string, string>()
+        {
+            {"English", "enUS"},
+            {"Chinese (China)", "zhCN"},
+            {"Chinese (Taiwan)", "zhTW"},
+            {"French", "frFR"},
+            {"German", "deDE"},
+            {"Italian", "itIT"},
+            {"Korean", "koKR"},
+            {"Polish", "plPL"},
+            {"Portuguese", "ptBR"},
+            {"Russian", "ruRU"},
+            {"Spanish (Mexico)", "esMX"},
+            {"Spanish (Spain)", "esES"}
+        };
     }
 }

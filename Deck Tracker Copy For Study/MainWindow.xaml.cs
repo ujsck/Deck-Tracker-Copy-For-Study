@@ -33,13 +33,20 @@ namespace Deck_Tracker_Copy_For_Study
         private Deck _newDeck;
         private bool _editingDeck;
         private bool _newContainsDeck;
+        private readonly Version _newVersion;
         private readonly string _logConfigPath =
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) + @"\Blizzard\Hearthstone\log.config";
 
         public MainWindow()
         {
             InitializeComponent();
-            //Helper.CheckForUpdates();
+            //var version = Helper.CheckForUpdates(out _newVersion);
+            //if (version != null)
+            //{
+            //    TxtblockVersion.Text = string.Format("Version: {0}.{1}.{2}", version.Major, version.Minor,
+            //                                         version.Build);
+            //}
+
             try
             {
                 if (!File.Exists(_logConfigPath))
@@ -91,7 +98,8 @@ namespace Deck_Tracker_Copy_For_Study
             ListboxDecks.ItemsSource = _decks.DecksList;
 
             //hearthstone, loads db etc
-            _hearthstone = new Hearthstone();
+            string languageTag = _config.SelectedLanguage;
+            _hearthstone = Helper.LanguageDict.ContainsValue(languageTag) ? new Hearthstone(languageTag) : new Hearthstone("enUS");
             _newDeck = new Deck();
             ListViewNewDeck.ItemsSource = _newDeck.Cards;
 

@@ -1,7 +1,9 @@
-﻿using Newtonsoft.Json;
+﻿using System;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
@@ -15,16 +17,18 @@ namespace Deck_Tracker_Copy_For_Study
         public static bool HighlightCardsInHand;
 
 
-        private readonly Dictionary<string, Card> _cardDb;
+        private static Dictionary<string, Card> _cardDb;
         //https://msdn.microsoft.com/zh-cn/library/ms668604.aspx
         public ObservableCollection<Card> EnemyCards;
         public ObservableCollection<Card> PlayerDeck;
+        public ObservableCollection<Card> PlayerDrawn;
         public int EnemyHandCount;
         public bool IsInMenu;
         public int PlayerHandCount;
         public string PlayingAgainst;
         public string PlayingAs;
 
+        public int[] OpponentHand { get; private set; }
         private readonly List<string> _invalidCardIds = new List<string>
         {
                 "EX1_tk34",
@@ -48,36 +52,85 @@ namespace Deck_Tracker_Copy_For_Study
                 "NEW1_006",
         };
 
-        public Hearthstone()
+        public Hearthstone(string languageTag)
         {
             IsInMenu = true;
             PlayerDeck = new ObservableCollection<Card>();
+            PlayerDrawn = new ObservableCollection<Card>();
             EnemyCards = new ObservableCollection<Card>();
             _cardDb = new Dictionary<string, Card>();
-            LoadCardDb();
+            for (int i = 0; i < 10; i++)
+            {
+                OpponentHand[i] = -1;
+            }
+            LoadCardDb(languageTag);
         }
 
-        private void LoadCardDb()
+        private void LoadCardDb(string languageTag)
         {
-            var obj = JObject.Parse(File.ReadAllText("cardsDB.json"));
-            foreach (var cardType in obj)
+            //var obj = JObject.Parse(File.ReadAllText("cardsDB.json"));
+            //foreach (var cardType in obj)
+            //{
+            //    if (cardType.Key != "Basic" && cardType.Key != "Expert" && cardType.Key != "Promotion" &&
+            //        cardType.Key != "Reward") continue;
+            //    foreach (var card in cardType.Value)
+            //    {
+            //        var tmp = JsonConvert.DeserializeObject<Card>(card.ToString());
+            //        _cardDb.Add(tmp.Id, tmp);
+            //    }
+            //}
+
+            try
             {
-                if (cardType.Key != "Basic" && cardType.Key != "Expert" && cardType.Key != "Promotion" &&
-                    cardType.Key != "Reward") continue;
-                foreach (var card in cardType.Value)
+                var localizedCardNames = new Dictionary<string, string>();
+                if (languageTag != "enUS")
                 {
-                    var tmp = JsonConvert.DeserializeObject<Card>(card.ToString());
-                    _cardDb.Add(tmp.Id, tmp);
+                    var localized = JObject.Parse(File.ReadAllText(string.Format("Files/cardsDB.{0}.json", languageTag)));
+                    foreach (var cardType in localized)
+                    {
+                        if (cardType.Key != "Basic" && cardType.Key != "Expert" && cardType.Key != "Promotion" &&
+                            cardType.Key != "Reward") continue;
+                        foreach (var card in cardType.Value)
+                        {
+                            var tmp = JsonConvert.DeserializeObject<Card>(card.ToString());
+                            localizedCardNames.Add(tmp.Id, tmp.Name);
+                        }
+                    }
                 }
+
+
+                //load engish db (needed for importing, etc)
+                var obj = JObject.Parse(File.ReadAllText("Files/cardsDB.enUS.json"));
+                var tempDb = new Dictionary<string, Card>();
+                foreach (var cardType in obj)
+                {
+                    if (cardType.Key != "Basic" && cardType.Key != "Expert" && cardType.Key != "Promotion" &&
+                        cardType.Key != "Reward") continue;
+                    foreach (var card in cardType.Value)
+                    {
+                        var tmp = JsonConvert.DeserializeObject<Card>(card.ToString());
+                        if (languageTag != "enUS")
+                        {
+                            tmp.LocalizedName = localizedCardNames[tmp.Id];
+                        }
+                        tempDb.Add(tmp.Id, tmp);
+                    }
+                }
+                _cardDb = new Dictionary<string, Card>(tempDb);
+            }
+            catch (Exception e)
+            {
+                Debug.WriteLine("Error loading db: \n" + e);
             }
         }
 
-        public Card GetCardFromDb(string cardId)
+        public static Card GetCardFromId(string cardId)
         {
-            if (cardId == "") return new Card();
-            return _cardDb[cardId];
+            if (string.IsNullOrEmpty(cardId)) return null;
+            if (_cardDb.ContainsKey(cardId))
+                return (Card)_cardDb[cardId].Clone();
+            return new Card(cardId, null, "UNKNOWN", "Minion", "UNKNOWN", 0, "UNKNOWN", 0, 1);
         }
-
 
         public List<Card> GetActualCards()
         {
@@ -106,7 +159,7 @@ namespace Deck_Tracker_Copy_For_Study
                 PlayerHandCount++;
                 return;
             }
-            var card = GetCardFromDb(cardId);
+            var card = GetCardFromId(cardId);
 
             if (!IsUsingPremade)
             {
@@ -172,7 +225,7 @@ namespace Deck_Tracker_Copy_For_Study
                 EnemyHandCount--;
                 return;
             }
-            Card card = GetCardFromDb(cardId);
+            Card card = GetCardFromId(cardId);
             if (EnemyCards.Any(x => x.Equals(card)))
             {
                 EnemyCards.Remove(card);
@@ -184,7 +237,7 @@ namespace Deck_Tracker_Copy_For_Study
 
         public void Mulligan(string cardId)
         {
-            Card card = GetCardFromDb(cardId);
+            Card card = GetCardFromId(cardId);
             if (!IsUsingPremade)
             {
                 Card deckCard = PlayerDeck.FirstOrDefault(c => c.Equals(card));
@@ -229,7 +282,7 @@ namespace Deck_Tracker_Copy_For_Study
 
         internal void PlayerDeckDiscard(string cardId)
         {
-            Card card = GetCardFromDb(cardId);
+            Card card = GetCardFromId(cardId);
 
             if (!IsUsingPremade)
             {
@@ -265,7 +318,7 @@ namespace Deck_Tracker_Copy_For_Study
             {
                 return;
             }
-            Card card = GetCardFromDb(cardId);
+            Card card = GetCardFromId(cardId);
             if (EnemyCards.Any(x => x.Equals(card)))
             {
                 EnemyCards.Remove(card);
