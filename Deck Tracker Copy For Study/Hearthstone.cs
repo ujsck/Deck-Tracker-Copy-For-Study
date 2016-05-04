@@ -11,7 +11,7 @@ namespace Deck_Tracker_Copy_For_Study
 {
     public class Hearthstone
     {
-        public static bool IsUsingPremade;
+        
 
         //dont like this solution, cant think of better atm
         public static bool HighlightCardsInHand;
@@ -25,8 +25,11 @@ namespace Deck_Tracker_Copy_For_Study
         public int EnemyHandCount;
         public bool IsInMenu;
         public int PlayerHandCount;
+        public bool OpponentHasCoin;
+        public int OpponentDeckCount;
         public string PlayingAgainst;
         public string PlayingAs;
+        public bool IsUsingPremade;
 
         public int[] OpponentHand { get; private set; }
         private readonly List<string> _invalidCardIds = new List<string>
@@ -59,6 +62,7 @@ namespace Deck_Tracker_Copy_For_Study
             PlayerDrawn = new ObservableCollection<Card>();
             EnemyCards = new ObservableCollection<Card>();
             _cardDb = new Dictionary<string, Card>();
+            OpponentHand = new int[10];
             for (int i = 0; i < 10; i++)
             {
                 OpponentHand[i] = -1;
@@ -132,6 +136,17 @@ namespace Deck_Tracker_Copy_For_Study
             return new Card(cardId, null, "UNKNOWN", "Minion", "UNKNOWN", 0, "UNKNOWN", 0, 1);
         }
 
+        public Card GetCardFromName(string name)
+        {
+            if (GetActualCards().Any(c => c.Name.Equals(name)))
+            {
+                return GetActualCards().FirstOrDefault(c => c.Name.ToLower() == name.ToLower());
+            }
+
+            //not sure with all the values here
+            return new Card("UNKNOWN", "Neutral", "UNKNOWN", "UNKNOWN", name, 0, name, 0, 1);
+        }
+
         public List<Card> GetActualCards()
         {
             return (from card in _cardDb.Values
@@ -142,44 +157,48 @@ namespace Deck_Tracker_Copy_For_Study
                     select card).ToList();
         }
 
-        public void SetPremadeDeck(ObservableCollection<Card> cards)
+        public void SetPremadeDeck(Deck deck)
         {
             PlayerDeck.Clear();
-            foreach (var card in cards)
+            foreach (var card in deck.Cards)
             {
                 PlayerDeck.Add(card);
             }
             IsUsingPremade = true;
         }
 
-        public void PlayerDraw(string cardId)
+        public bool PlayerDraw(string cardId)
         {
+            PlayerHandCount++;
+
             if (cardId == "GAME_005")
             {
-                PlayerHandCount++;
-                return;
+                OpponentHasCoin = false;
+                return true;
             }
+
             var card = GetCardFromId(cardId);
 
-            if (!IsUsingPremade)
+            if (PlayerDrawn.Contains(card))
             {
-                if (PlayerDeck.Contains(card))
-                {
-                    PlayerDeck.Remove(card);
-                    card.Count++;
-                }
-                PlayerDeck.Add(card);
+                PlayerDrawn.Remove(card);
+                card.Count++;
             }
-            else
-            {
-                var deckCard = PlayerDeck.FirstOrDefault(x => x.Name != null && x.Name.Equals(card.Name));
+            PlayerDrawn.Add(card);
 
+            if (PlayerDeck.Contains(card))
+            {
+                var deckCard = PlayerDeck.First(c => c.Equals(card));
                 PlayerDeck.Remove(deckCard);
                 deckCard.Count--;
                 deckCard.InHandCount++;
                 PlayerDeck.Add(deckCard);
             }
-            PlayerHandCount++;
+            else
+            {
+                return false;
+            }
+            return true;
         }
 
         //cards from board(?), thoughtsteal etc
@@ -265,7 +284,7 @@ namespace Deck_Tracker_Copy_For_Study
             EnemyHandCount--;
         }
 
-        internal void PlayerHandDiscard(string cardId)
+        public void PlayerHandDiscard(string cardId)
         {
             PlayerHandCount--;
             if (IsUsingPremade)
@@ -280,39 +299,53 @@ namespace Deck_Tracker_Copy_For_Study
             }
         }
 
-        internal void PlayerDeckDiscard(string cardId)
+        public bool PlayerDeckDiscard(string cardId)
         {
             Card card = GetCardFromId(cardId);
 
-            if (!IsUsingPremade)
+            if (PlayerDrawn.Contains(card))
             {
-                if (PlayerDeck.Contains(card))
-                {
-                    PlayerDeck.Remove(card);
-                    card.Count++;
-                }
-                PlayerDeck.Add(card);
+                PlayerDrawn.Remove(card);
+                card.Count++;
             }
-            else
+            PlayerDrawn.Add(card);
+
+            if (PlayerDeck.Contains(card))
             {
-                Card deckCard = PlayerDeck.FirstOrDefault(x => x.Name != null && x.Name.Equals(card.Name));
+                var deckCard = PlayerDeck.First(c => c.Equals(card));
                 PlayerDeck.Remove(deckCard);
                 deckCard.Count--;
                 PlayerDeck.Add(deckCard);
             }
+            else
+            {
+                return false;
+            }
+            return true;
         }
 
-        internal void EnemyHandDiscard()
+        public void EnemyHandDiscard()
         {
             EnemyHandCount--;
         }
 
-        internal void EnemyDeckDiscard()
+        public void EnemyDeckDiscard(string cardId)
         {
-            //nothing for now
+            OpponentDeckCount--;
+            if (string.IsNullOrEmpty(cardId))
+            {
+                return;
+            }
+            var card = GetCardFromId(cardId);
+            if (EnemyCards.Contains(card))
+            {
+                EnemyCards.Remove(card);
+                card.Count++;
+            }
+            EnemyCards.Add(card);
         }
 
-        internal void EnemySecretTriggered(string cardId)
+        public void EnemySecretTriggered(string cardId)
         {
             if (cardId == "")
             {
@@ -340,6 +373,65 @@ namespace Deck_Tracker_Copy_For_Study
                     EnemyCards.Add(card);
                 }
             }
+        }
+
+        internal void OpponentGet(string cardId)
+        {
+            EnemyHandCount++;
+        }
+
+        internal void Reset()
+        {
+            PlayerDrawn.Clear();
+            PlayerHandCount = 0;
+            EnemyCards.Clear();
+            EnemyHandCount = 0;
+            OpponentDeckCount = 30;
+            OpponentHasCoin = true;
+            OpponentHand = new int[10];
+            //handPosIndex = 0;
+            for (int i = 0; i < 10; i++)
+            {
+                OpponentHand[i] = -1;
+            }
+
+        }
+
+        public void OpponentCardPosChange(CardPosChangeArgs args)
+        {
+            if (args.Action == OpponentHandMovement.Play)
+            {
+                Debug.WriteLine(string.Format("From {0} to Play", args.From), "CardPosChange");
+                OpponentHand[args.From - 1] = -1;
+                for (int i = args.From - 1; i < 9; i++)
+                {
+                    OpponentHand[i] = OpponentHand[i + 1];
+                }
+                OpponentHand[9] = -1;
+                //handPosIndex--;
+            }
+            else if (args.Action == OpponentHandMovement.Draw)
+            {
+                //one of the two ifs alone always seems to screw up at some point. maybe this works
+                // if (OpponentHand[handPosIndex] == -1)
+                // {
+                //     OpponentHand[handPosIndex] = args.Turn;
+                //    Debug.WriteLine("1set " + handPosIndex + "( " + (EnemyHandCount - 1) + " )");
+                //} else 
+                if (OpponentHand[EnemyHandCount - 1] == -1)
+                {
+                    OpponentHand[EnemyHandCount - 1] = args.Turn;
+                    Debug.WriteLine("set " + (EnemyHandCount - 1));
+                }
+
+                //handPosIndex++;
+            }
+            //Debug.WriteLine(string.Join(",", OpponentHand));
+        }
+
+        public List<int> GetOpponentHandAge()
+        {
+            return OpponentHand.Where(x => x != -1).ToList();
         }
     }
 }

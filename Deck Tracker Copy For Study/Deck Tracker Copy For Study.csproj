@@ -54,6 +54,9 @@
     <StartupObject>Deck_Tracker_Copy_For_Study.App</StartupObject>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="HtmlAgilityPack">
+      <HintPath>..\packages\HtmlAgilityPack.1.4.6\lib\Net45\HtmlAgilityPack.dll</HintPath>
+    </Reference>
     <Reference Include="MahApps.Metro">
       <HintPath>..\packages\MahApps.Metro.0.13.1.0\lib\net45\MahApps.Metro.dll</HintPath>
     </Reference>
@@ -63,6 +66,7 @@
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Web" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
@@ -107,17 +111,24 @@
     <Compile Include="Hearthstone.cs" />
     <Compile Include="Helper.cs" />
     <Compile Include="LogReader.cs" />
-    <Compile Include="OpponentWindow.xaml.cs">
+    <Compile Include="TurnTimer.cs" />
+    <Compile Include="Windows\DeckSelectionDialog.xaml.cs">
+      <DependentUpon>DeckSelectionDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Windows\OpponentWindow.xaml.cs">
       <DependentUpon>OpponentWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="OverlayWindow.xaml.cs">
+    <Compile Include="Windows\OverlayWindow.xaml.cs">
       <DependentUpon>OverlayWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="PlayerWindow.xaml.cs">
+    <Compile Include="Windows\PlayerWindow.xaml.cs">
       <DependentUpon>PlayerWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="SerializableVersion.cs" />
     <Compile Include="User32.cs" />
+    <Compile Include="Windows\TimerWindow.xaml.cs">
+      <DependentUpon>TimerWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="XmlManager.cs" />
     <Page Include="Controls\DeckListView.xaml">
       <SubType>Designer</SubType>
@@ -151,15 +162,23 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Page Include="OpponentWindow.xaml">
+    <Page Include="Windows\DeckSelectionDialog.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="OverlayWindow.xaml">
-      <SubType>Designer</SubType>
+    <Page Include="Windows\OpponentWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
     </Page>
-    <Page Include="PlayerWindow.xaml">
+    <Page Include="Windows\OverlayWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Windows\PlayerWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Windows\TimerWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
