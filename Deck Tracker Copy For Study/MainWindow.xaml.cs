@@ -72,6 +72,7 @@ namespace Deck_Tracker_Copy_For_Study
             //load config
             _config = new Config();
             _xmlManagerConfig = new XmlManager<Config> { Type = typeof(Config) };
+            // if no config.xml. Create it.
             if (!File.Exists(_config.ConfigPath))
             {
                 using (var sr = new StreamWriter(_config.ConfigPath, false))
@@ -79,6 +80,7 @@ namespace Deck_Tracker_Copy_For_Study
                     sr.WriteLine("<Config></Config>");
                 }
             }
+            // load config.xml settings
             try
             {
                 _config = _xmlManagerConfig.Load("config.xml");
@@ -98,6 +100,7 @@ namespace Deck_Tracker_Copy_For_Study
             //find hs directory
             if (string.IsNullOrEmpty(_config.HearthstoneDirectory) || !File.Exists(_config.HearthstoneDirectory + @"\Hearthstone.exe"))
             {
+                // search regedit
                 using (var hsDirKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Hearthstone"))
                 {
                     if (hsDirKey != null)
@@ -194,16 +197,16 @@ namespace Deck_Tracker_Copy_For_Study
             {
                 DeckPickerList.AddDeck(deck);
             }
+            // only deck changed trigger it. see DeckPickerList SelectedChanged
             DeckPickerList.SelectedDeckChanged += DeckPickerListOnSelectedDeckChanged;
-            //ListboxDecks.ItemsSource = _deckList.DecksList;
 
-            _notifyIcon = new System.Windows.Forms.NotifyIcon();
-            _notifyIcon.Icon = new Icon(@"Images/HearthstoneDeckTracker.ico");
+            _notifyIcon = new System.Windows.Forms.NotifyIcon { Icon = new Icon(@"Images/HearthstoneDeckTracker.ico") };
             _notifyIcon.MouseDoubleClick += NotifyIconOnMouseDoubleClick;
             _notifyIcon.Visible = false;
 
 
             _newDeck = new Deck();
+            // ItemsSource = ObservableCollection runtime
             ListViewNewDeck.ItemsSource = _newDeck.Cards;
 
             //create overlay
@@ -216,6 +219,7 @@ namespace Deck_Tracker_Copy_For_Study
             _opponentWindow = new OpponentWindow(_config, _hearthstone.EnemyCards);
             _timerWindow = new TimerWindow(_config);
 
+            // config settings
             if (_config.WindowsOnStartup)
             {
                 _playerWindow.Show();
@@ -240,7 +244,7 @@ namespace Deck_Tracker_Copy_For_Study
                 _deckList.AllTags.Add("Constructed");
                 _xmlManager.Save("PlayerDecks.xml", _deckList);
             }
-
+            // set datasource
             ComboboxAccent.ItemsSource = ThemeManager.Accents;
             ComboboxTheme.ItemsSource = ThemeManager.AppThemes;
             ComboboxLanguages.ItemsSource = Helper.LanguageDict.Keys;
@@ -911,8 +915,6 @@ namespace Deck_Tracker_Copy_For_Study
 
         private async void BtnEditDeck_Click(object sender, RoutedEventArgs e)
         {
-            //if (ListboxDecks.SelectedIndex == -1) return;
-            //var selectedDeck = ListboxDecks.SelectedItem as Deck;
             var selectedDeck = DeckPickerList.SelectedDeck;
             if (selectedDeck == null) return;
             //move to new deck section with stuff preloaded
@@ -991,9 +993,8 @@ namespace Deck_Tracker_Copy_For_Study
                 await _deckExporter.Export(DeckPickerList.SelectedDeck);
                 await controller.CloseAsync();
             }
-
-
         }
+
         private void BtnSetTag_Click(object sender, RoutedEventArgs e)
         {
             FlyoutSetTags.IsOpen = !FlyoutSetTags.IsOpen;
@@ -1008,6 +1009,7 @@ namespace Deck_Tracker_Copy_For_Study
                 TagControlFilter.LoadTags(_deckList.AllTags);
             }
         }
+
         private void TagControlSetOnDeleteTag(TagControl sender, string tag)
         {
             if (_deckList.AllTags.Contains(tag))
@@ -1361,25 +1363,16 @@ namespace Deck_Tracker_Copy_For_Study
                                 break;
                             case "Class Only":
                                 if (card.GetPlayerClass == selectedClass)
-                                {
                                     ListViewDB.Items.Add(card);
-                                }
                                 break;
                             case "Neutral Only":
                                 if (card.GetPlayerClass == "Neutral")
-                                {
                                     ListViewDB.Items.Add(card);
-                                }
                                 break;
                         }
                     }
                 }
-
-
-                var view1 = (CollectionView)CollectionViewSource.GetDefaultView(ListViewDB.Items);
-                view1.SortDescriptions.Add(new SortDescription("Cost", ListSortDirection.Ascending));
-                view1.SortDescriptions.Add(new SortDescription("Type", ListSortDirection.Descending));
-                view1.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
+                SortCardCollection(ListViewDB.Items);
             }
         }
 
@@ -1520,7 +1513,6 @@ namespace Deck_Tracker_Copy_For_Study
         {
             UpdateDbListView();
         }
-
 
         #endregion
 
@@ -2193,7 +2185,6 @@ namespace Deck_Tracker_Copy_For_Study
         }
 
         #endregion
-
 
     }
 }

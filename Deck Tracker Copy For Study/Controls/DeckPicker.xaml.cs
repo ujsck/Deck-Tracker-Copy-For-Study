@@ -145,6 +145,7 @@ namespace Deck_Tracker_Copy_For_Study
             SelectDeck(deck);
 
         }
+
         public void SelectDeck(Deck deck)
         {
             if (deck == null) return;

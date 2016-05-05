@@ -20,7 +20,7 @@ namespace Deck_Tracker_Copy_For_Study
         public bool HideDrawChances = false;
         public bool HideOverlay = false;
         public int WindowHeight = 672;
-        public string HearthstoneDirectory = "";
+        public string HearthstoneDirectory = @"C:\Program Files (x86)\Hearthstone";
         public bool ShowInTaskbar = false;
         public bool HighlightCardsInHand = false;
         public int OffsetX = 0;
