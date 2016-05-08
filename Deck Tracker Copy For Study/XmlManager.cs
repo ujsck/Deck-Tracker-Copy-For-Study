@@ -5,6 +5,7 @@ using System.Xml.Serialization;
 namespace Deck_Tracker_Copy_For_Study
 {
     //https://msdn.microsoft.com/zh-cn/library/system.xml(v=vs.110).aspx
+    //Todo 
     public class XmlManager<T>
     {
         public Type Type;
