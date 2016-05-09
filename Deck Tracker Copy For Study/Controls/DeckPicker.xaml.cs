@@ -102,7 +102,7 @@ namespace Deck_Tracker_Copy_For_Study
         private HsClass _selectedClass;
 
         public Deck SelectedDeck;
-
+        // Read Professional C# CHapter 8
         public delegate void SelectedDeckHandler(DeckPicker sender, Deck deck);
 
         public event SelectedDeckHandler SelectedDeckChanged;
